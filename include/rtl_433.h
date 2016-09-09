@@ -27,12 +27,15 @@
 #endif
 
 #define DEFAULT_SAMPLE_RATE     250000
+//#define DEFAULT_AIRSPY_SAMPLE_RATE 2500000
+#define DEFAULT_AIRSPY_SAMPLE_RATE 2500000
 #define DEFAULT_FREQUENCY       433920000
 #define DEFAULT_HOP_TIME        (60*10)
 #define DEFAULT_HOP_EVENTS      2
 #define DEFAULT_ASYNC_BUF_NUMBER    32
 #define DEFAULT_BUF_LENGTH      (16 * 16384)
-#define DEFAULT_LEVEL_LIMIT     8000		// Theoretical high level at I/Q saturation is 128x128 = 16384 (above is ripple)
+//#define DEFAULT_LEVEL_LIMIT     8000		// Theoretical high level at I/Q saturation is 128x128 = 16384 (above is ripple)
+#define DEFAULT_LEVEL_LIMIT     1200		// Theoretical high level at I/Q saturation is 128x128 = 16384 (above is ripple)
 #define MINIMAL_BUF_LENGTH      512
 #define MAXIMAL_BUF_LENGTH      (256 * 16384)
 #define MAX_PROTOCOLS           65

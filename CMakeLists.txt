@@ -45,6 +45,7 @@ endif()
 ########################################################################
 find_package(PkgConfig)
 find_package(LibRTLSDR)
+find_package(LibAIRSPY)
 
 ########################################################################
 # Setup the include and linker paths
@@ -52,6 +53,7 @@ find_package(LibRTLSDR)
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
 	${LIBRTLSDR_INCLUDE_DIRS}
+	${LIBAIRSPY_INCLUDE_DIRS}
 )
 
 ########################################################################

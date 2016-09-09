@@ -16,7 +16,7 @@
 ########################################################################
 # Build utility
 ########################################################################
-add_executable(rtl_433 
+add_executable(rtl_433_airspy 
 	baseband.c
 	bitbuffer.c
 	data.c
@@ -87,15 +87,28 @@ add_executable(rtl_433
 
 add_library(data data.c)
 
-target_link_libraries(rtl_433
+
+
+target_link_libraries(rtl_433_airspy
 	${LIBRTLSDR_LIBRARIES}
+	${LIBAIRSPY_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
 )
 
-	
-set(INSTALL_TARGETS rtl_433)
+
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+	${LIBRTLSDR_INCLUDE_DIRS}
+	${LIBAIRSPY_INCLUDE_DIR}
+)
+
+
+  
+  
+
+set(INSTALL_TARGETS rtl_433_airspy)
 if(UNIX)
-target_link_libraries(rtl_433 m)
+target_link_libraries(rtl_433_airspy m)
 endif()
 
 ########################################################################
