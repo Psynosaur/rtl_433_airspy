@@ -102,6 +102,7 @@ static int oregon_scientific_callback_sl109h(bitbuffer_t *bitbuffer)
     int status;
     char time_str[LOCAL_TIME_BUFLEN];
 
+	int events = 0;
     for(int row_index = 0; row_index < bitbuffer->num_rows; row_index++) {
         msg = bitbuffer->bb[row_index];
 
@@ -130,9 +131,10 @@ static int oregon_scientific_callback_sl109h(bitbuffer_t *bitbuffer)
                          "status",        "Status",                             DATA_INT,    status,
                          NULL);
         data_acquired_handler(data);
+		events++;
     }
 
-    return bitbuffer->num_rows;
+    return events;
 }
 
 static char *output_fields[] = {
