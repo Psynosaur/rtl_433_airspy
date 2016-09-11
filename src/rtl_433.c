@@ -103,7 +103,7 @@ void usage(r_device *devices) {
 	int i;
 
 	fprintf(stderr,
-		"rtl_433, an ISM band generic data receiver for RTL2832 based DVB-T receivers\n\n"
+		"rtl_433_airspy, an ISM band generic data receiver for Airspy and RTL2832 based DVB-T receivers\n\n"
 		"Usage:\t= Tuner options =\n"
 		"\t[-d <device index>] (default: 0)\n"
 		"\t[-g <gain>] (default: 0 for auto)\n"
@@ -183,6 +183,12 @@ static void sighandler(int signum) {
 
 
 static void register_protocol(struct dm_state *demod, r_device *t_dev) {
+
+	if (demod->r_dev_num >= MAX_PROTOCOLS) {
+		fprintf(stderr, "Max number of protocols reached %d. Skipping \"%s\"\n", MAX_PROTOCOLS, t_dev->name);
+		return;
+	}
+
 	struct protocol_state *p = calloc(1, sizeof(struct protocol_state));
 	p->short_limit = (float)t_dev->short_limit / ((float)1000000 / (float)samp_rate);
 	p->long_limit = (float)t_dev->long_limit / ((float)1000000 / (float)samp_rate);
@@ -200,8 +206,7 @@ static void register_protocol(struct dm_state *demod, r_device *t_dev) {
 		fprintf(stderr, "Registering protocol [%d] \"%s\"\n", demod->r_dev_num, t_dev->name);
 	}
 
-	if (demod->r_dev_num > MAX_PROTOCOLS)
-		fprintf(stderr, "Max number of protocols reached %d\n", MAX_PROTOCOLS);
+
 }
 
 
@@ -657,48 +662,59 @@ static void async_rx_callback(unsigned char *iq_buf, uint32_t len, void *ctx) {
 		pwm_analyze(demod, demod->am_buf, len / 2);
 	}
 	else {
+
 		// Detect a package and loop through demodulators with pulse data
 		int package_type = 1;	// Just to get us started
 		while (package_type) {
+			
 			package_type = pulse_detect_package(demod->am_buf, demod->fm_buf, len / 2, demod->level_limit, samp_rate, &demod->pulse_data, &demod->fsk_pulse_data);
 			if (package_type == 1) {
 				if (demod->analyze_pulses) fprintf(stderr, "Detected OOK package\n");
+
 				for (i = 0; i < demod->r_dev_num; i++) {
+					int result_event = 0;
+
 					switch (demod->r_devs[i]->modulation) {
 					case OOK_PULSE_PCM_RZ:
-						pulse_demod_pcm(&demod->pulse_data, demod->r_devs[i]);
+						result_event = pulse_demod_pcm(&demod->pulse_data, demod->r_devs[i]);
 						break;
 					case OOK_PULSE_PPM_RAW:
-						pulse_demod_ppm(&demod->pulse_data, demod->r_devs[i]);
+						result_event = pulse_demod_ppm(&demod->pulse_data, demod->r_devs[i]);
 						break;
 					case OOK_PULSE_PWM_PRECISE:
-						pulse_demod_pwm_precise(&demod->pulse_data, demod->r_devs[i]);
+						result_event = pulse_demod_pwm_precise(&demod->pulse_data, demod->r_devs[i]);
 						break;
 					case OOK_PULSE_PWM_RAW:
-						pulse_demod_pwm(&demod->pulse_data, demod->r_devs[i]);
+						result_event = pulse_demod_pwm(&demod->pulse_data, demod->r_devs[i]);
 						break;
 					case OOK_PULSE_PWM_TERNARY:
-						pulse_demod_pwm_ternary(&demod->pulse_data, demod->r_devs[i]);
+						result_event = pulse_demod_pwm_ternary(&demod->pulse_data, demod->r_devs[i]);
 						break;
 					case OOK_PULSE_MANCHESTER_ZEROBIT:
-						pulse_demod_manchester_zerobit(&demod->pulse_data, demod->r_devs[i]);
+						result_event = pulse_demod_manchester_zerobit(&demod->pulse_data, demod->r_devs[i]);
 						break;
 					case OOK_PULSE_CLOCK_BITS:
-						pulse_demod_clock_bits(&demod->pulse_data, demod->r_devs[i]);
+						result_event = result_event = pulse_demod_clock_bits(&demod->pulse_data, demod->r_devs[i]);
 						break;
 					case OOK_PULSE_PWM_OSV1:
-						pulse_demod_osv1(&demod->pulse_data, demod->r_devs[i]);
+						result_event = pulse_demod_osv1(&demod->pulse_data, demod->r_devs[i]);
 						break;
 						// FSK decoders
 					case FSK_PULSE_PCM:
 					case FSK_PULSE_PWM_RAW:
 						break;
 					case FSK_PULSE_MANCHESTER_ZEROBIT:
-						pulse_demod_manchester_zerobit(&demod->pulse_data, demod->r_devs[i]);
+						result_event = pulse_demod_manchester_zerobit(&demod->pulse_data, demod->r_devs[i]);
 						break;
 					default:
 						fprintf(stderr, "Unknown modulation %d in protocol!\n", demod->r_devs[i]->modulation);
 					}
+
+					if (result_event) {				
+						float dbg_freq =  ((float)demod->pulse_data.fsk_f1_est / INT16_MAX*samp_rate / 2.0) + frequency[0];
+						fprintf(stderr, "%.3fMHz - %s \n", dbg_freq / 1000000, demod->r_devs[i]->name);
+					}
+
 				} // for demodulators
 				if (debug_output > 1) pulse_data_print(&demod->pulse_data);
 				if (demod->analyze_pulses) pulse_analyzer(&demod->pulse_data, samp_rate);
@@ -953,7 +969,6 @@ int main(int argc, char **argv) {
 
 
 
-
 	while ((opt = getopt(argc, argv, "x:z:p:DtaAqm:r:l:d:f:g:s:b:n:SR:F:C:T:UWG")) != -1) {
 		switch (opt) {
 		case 'd':
@@ -1104,6 +1119,11 @@ int main(int argc, char **argv) {
 	{
 		//samp_rate = 10000000 / airspy_decimation_factor;
 		samp_rate = 2500000 / airspy_decimation_factor;
+
+		if (demod->level_limit == DEFAULT_LEVEL_LIMIT)
+		{
+			demod->level_limit = 0;
+		}
 	}
 
 
@@ -1187,7 +1207,7 @@ int main(int argc, char **argv) {
 
 
 		if (!quiet_mode) {
-			fprintf(stderr, "\nFound %d  rtl device(s):\n", rtl_device_count);
+			fprintf(stderr, "\nFound %d rtl device(s):\n", rtl_device_count);
 			for (i = 0; i < rtl_device_count; i++) {
 				rtlsdr_get_device_usb_strings(i, vendor, product, serial);
 				fprintf(stderr, "    %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
@@ -1217,7 +1237,7 @@ int main(int argc, char **argv) {
 				}
 			
 				fprintf(stderr, "\n");
-				fprintf(stderr, "Using airspy device %d: %s\n\n", dev_index, version);
+				fprintf(stderr, "Using airspy device #%d: [%s]\n\n", dev_index, version);
 			}
 		}
 
@@ -1248,8 +1268,8 @@ int main(int argc, char **argv) {
 			r = rtlsdr_set_sample_rate(rtlsdr_dev, samp_rate);
 			if (r < 0) {
 				fprintf(stderr, "WARNING: Failed to set sample rate.\n");
-			}
-			else {
+				exit(1);
+			} else {
 				fprintf(stderr, "Sample rate set to %d.\n", rtlsdr_get_sample_rate(rtlsdr_dev)); // Unfortunately, doesn't return real rate
 			}
 		} 
@@ -1265,7 +1285,7 @@ int main(int argc, char **argv) {
 			} 
 			else
 			{
-				fprintf(stderr, "Sample rate set to %.3f MSPS (from %.0f MSPS / %d)  \n", samp_rate/1000000.0, (samp_rate*airspy_decimation_factor)/1000000.0, airspy_decimation_factor);
+				fprintf(stderr, "Sample rate set to %.3f MSPS (from %.3f MSPS / %d)  \n", samp_rate/1000000.0, (samp_rate*airspy_decimation_factor)/1000000.0, airspy_decimation_factor);
 			}
 
 		}
@@ -1303,7 +1323,7 @@ int main(int argc, char **argv) {
 		{
 			
 			if (0 == gain) {
-				gain = 12;
+				gain = 15;
 			} else
 			{
 				gain /= 10; 
